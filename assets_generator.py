@@ -1,15 +1,21 @@
 """
 Asset Generator
 Generates Bluey-inspired cartoon graphics programmatically.
+Creates the iconic Bluey park background and game elements.
 """
 
 import pygame
 import math
+import random
 from typing import Tuple
 
 
 # Bluey-inspired color palette
 class Palette:
+    # Sky colors (bright Australian sky)
+    SKY_TOP = (120, 200, 255)         # Bright blue top
+    SKY_BOTTOM = (180, 230, 255)      # Lighter blue horizon
+
     # Blues
     SKY_BLUE = (108, 172, 228)
     DEEP_BLUE = (59, 108, 180)
@@ -22,12 +28,28 @@ class Palette:
     WARM_YELLOW = (255, 218, 107)
     SUNSET_ORANGE = (255, 180, 100)
 
-    # Environment
-    GRASS_GREEN = (122, 182, 72)
-    LIGHT_GREEN = (166, 214, 126)
-    DARK_GREEN = (80, 140, 50)
-    SKY_TOP = (135, 206, 250)
-    SKY_BOTTOM = (200, 235, 255)
+    # Environment - Bluey park greens
+    GRASS_BRIGHT = (140, 200, 80)     # Bright grass (foreground)
+    GRASS_GREEN = (120, 180, 70)      # Main grass
+    GRASS_DARK = (90, 150, 50)        # Darker grass (shadows/hills)
+    GRASS_LIGHT = (170, 220, 110)     # Light grass highlights
+
+    # Tree colors (eucalyptus style)
+    TREE_TRUNK = (140, 100, 70)       # Brown trunk
+    TREE_TRUNK_DARK = (100, 70, 50)   # Dark trunk shadow
+    TREE_LEAVES = (80, 150, 80)       # Green leaves
+    TREE_LEAVES_LIGHT = (120, 180, 100)  # Light leaf highlights
+    TREE_LEAVES_DARK = (50, 110, 50)  # Dark leaf shadows
+
+    # Bush colors
+    BUSH_GREEN = (70, 140, 70)
+    BUSH_LIGHT = (100, 170, 90)
+
+    # Flowers
+    FLOWER_YELLOW = (255, 230, 100)
+    FLOWER_PINK = (255, 150, 180)
+    FLOWER_WHITE = (255, 255, 255)
+    FLOWER_PURPLE = (180, 130, 200)
 
     # Balloon colors
     BALLOON_RED = (255, 100, 100)
@@ -48,70 +70,269 @@ class AssetGenerator:
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.assets = {}
+        # Use a seed for consistent "random" elements
+        random.seed(42)
 
     def generate_all(self):
         """Generate all game assets."""
-        self.assets['background'] = self._create_background()
+        self.assets['background'] = self._create_bluey_park_background()
         self.assets['balloon'] = self._create_balloon(100)
         self.assets['balloon_popped'] = self._create_popped_balloon(100)
-        self.assets['cloud1'] = self._create_cloud(120, 60)
-        self.assets['cloud2'] = self._create_cloud(100, 50)
-        self.assets['sun'] = self._create_sun(80)
+        self.assets['cloud1'] = self._create_fluffy_cloud(150, 80)
+        self.assets['cloud2'] = self._create_fluffy_cloud(120, 65)
+        self.assets['sun'] = self._create_sun(90)
         self.assets['wind_arrow'] = self._create_wind_arrow(60)
-        self.assets['grass_tuft'] = self._create_grass_tuft(40, 30)
 
         return self.assets
 
-    def _create_background(self) -> pygame.Surface:
-        """Create the game background with sky and ground."""
+    def _create_bluey_park_background(self) -> pygame.Surface:
+        """Create the iconic Bluey park background."""
         surface = pygame.Surface((self.screen_width, self.screen_height))
 
-        # Draw gradient sky
-        for y in range(self.screen_height - 100):
-            ratio = y / (self.screen_height - 100)
+        ground_y = self.screen_height - 120  # Ground level
+
+        # 1. Draw gradient sky
+        self._draw_sky_gradient(surface, ground_y)
+
+        # 2. Draw distant hills (background layer)
+        self._draw_distant_hills(surface, ground_y)
+
+        # 3. Draw the big iconic tree on the left
+        self._draw_big_tree(surface, 150, ground_y)
+
+        # 4. Draw another tree on the right
+        self._draw_medium_tree(surface, self.screen_width - 200, ground_y)
+
+        # 5. Draw bushes
+        self._draw_bushes(surface, ground_y)
+
+        # 6. Draw main grass ground with rolling hills
+        self._draw_grass_ground(surface, ground_y)
+
+        # 7. Draw grass details and flowers
+        self._draw_grass_details(surface, ground_y)
+
+        return surface
+
+    def _draw_sky_gradient(self, surface: pygame.Surface, ground_y: int):
+        """Draw the bright Australian sky gradient."""
+        for y in range(ground_y):
+            ratio = y / ground_y
+            # Interpolate from top to bottom
             r = int(Palette.SKY_TOP[0] + (Palette.SKY_BOTTOM[0] - Palette.SKY_TOP[0]) * ratio)
             g = int(Palette.SKY_TOP[1] + (Palette.SKY_BOTTOM[1] - Palette.SKY_TOP[1]) * ratio)
             b = int(Palette.SKY_TOP[2] + (Palette.SKY_BOTTOM[2] - Palette.SKY_TOP[2]) * ratio)
             pygame.draw.line(surface, (r, g, b), (0, y), (self.screen_width, y))
 
-        # Draw ground
-        ground_y = self.screen_height - 100
-        pygame.draw.rect(surface, Palette.GRASS_GREEN,
-                        (0, ground_y, self.screen_width, 100))
+    def _draw_distant_hills(self, surface: pygame.Surface, ground_y: int):
+        """Draw rolling hills in the background."""
+        # Far distant hill (lighter)
+        hill_color = (160, 210, 140)
+        points = [(0, ground_y - 40)]
+        for x in range(0, self.screen_width + 50, 50):
+            y_offset = math.sin(x * 0.008) * 30 + math.sin(x * 0.015) * 15
+            points.append((x, ground_y - 60 + y_offset))
+        points.append((self.screen_width, ground_y - 40))
+        points.append((self.screen_width, ground_y))
+        points.append((0, ground_y))
+        pygame.draw.polygon(surface, hill_color, points)
 
-        # Draw grass details (lighter patches)
-        for x in range(0, self.screen_width, 40):
-            # Random-ish grass bumps
-            offset = (x * 7) % 20 - 10
-            self._draw_grass_bump(surface, x + offset, ground_y,
-                                 Palette.LIGHT_GREEN)
+        # Closer hill (darker green)
+        hill_color2 = (130, 190, 100)
+        points2 = [(0, ground_y - 20)]
+        for x in range(0, self.screen_width + 50, 50):
+            y_offset = math.sin(x * 0.012 + 1) * 25 + math.sin(x * 0.02) * 10
+            points2.append((x, ground_y - 35 + y_offset))
+        points2.append((self.screen_width, ground_y - 20))
+        points2.append((self.screen_width, ground_y))
+        points2.append((0, ground_y))
+        pygame.draw.polygon(surface, hill_color2, points2)
 
-        # Draw some decorative flowers/dots
-        for x in range(30, self.screen_width - 30, 80):
-            y_offset = ((x * 13) % 40) - 20
-            color = Palette.WARM_YELLOW if (x // 80) % 2 == 0 else Palette.CORAL
-            pygame.draw.circle(surface, color,
-                              (x, ground_y + 30 + y_offset), 8)
-            pygame.draw.circle(surface, Palette.WHITE,
-                              (x - 2, ground_y + 28 + y_offset), 3)
+    def _draw_big_tree(self, surface: pygame.Surface, x: int, ground_y: int):
+        """Draw the iconic big Bluey tree with spread branches."""
+        trunk_width = 45
+        trunk_height = 250
 
-        return surface
-
-    def _draw_grass_bump(self, surface: pygame.Surface, x: int, y: int,
-                        color: Tuple[int, int, int]):
-        """Draw a small grass bump."""
-        points = [
-            (x - 15, y + 5),
-            (x - 5, y - 10),
-            (x, y - 15),
-            (x + 5, y - 10),
-            (x + 15, y + 5),
+        # Tree trunk shadow
+        trunk_shadow = [
+            (x - trunk_width//2 + 8, ground_y),
+            (x - trunk_width//3 + 8, ground_y - trunk_height),
+            (x + trunk_width//3 + 8, ground_y - trunk_height),
+            (x + trunk_width//2 + 8, ground_y),
         ]
-        pygame.draw.polygon(surface, color, points)
+        pygame.draw.polygon(surface, Palette.TREE_TRUNK_DARK, trunk_shadow)
+
+        # Main trunk
+        trunk_points = [
+            (x - trunk_width//2, ground_y),
+            (x - trunk_width//3, ground_y - trunk_height),
+            (x + trunk_width//3, ground_y - trunk_height),
+            (x + trunk_width//2, ground_y),
+        ]
+        pygame.draw.polygon(surface, Palette.TREE_TRUNK, trunk_points)
+
+        # Trunk texture lines
+        for i in range(5):
+            line_y = ground_y - 40 - i * 45
+            pygame.draw.line(surface, Palette.TREE_TRUNK_DARK,
+                           (x - trunk_width//3 + 5, line_y),
+                           (x + trunk_width//3 - 5, line_y + 10), 2)
+
+        # Large leafy canopy (multiple overlapping circles)
+        canopy_y = ground_y - trunk_height - 40
+        canopy_radius = 120
+
+        # Shadow layer
+        shadow_offset = 8
+        canopy_circles = [
+            (x, canopy_y, canopy_radius),
+            (x - 80, canopy_y + 30, 70),
+            (x + 80, canopy_y + 30, 70),
+            (x - 50, canopy_y - 40, 60),
+            (x + 50, canopy_y - 40, 60),
+            (x, canopy_y - 60, 50),
+            (x - 100, canopy_y + 60, 55),
+            (x + 100, canopy_y + 60, 55),
+        ]
+
+        # Draw shadow
+        for cx, cy, r in canopy_circles:
+            pygame.draw.circle(surface, Palette.TREE_LEAVES_DARK,
+                             (cx + shadow_offset, cy + shadow_offset), r)
+
+        # Draw main canopy
+        for cx, cy, r in canopy_circles:
+            pygame.draw.circle(surface, Palette.TREE_LEAVES, (cx, cy), r)
+
+        # Draw highlights
+        for cx, cy, r in canopy_circles:
+            pygame.draw.circle(surface, Palette.TREE_LEAVES_LIGHT,
+                             (cx - r//4, cy - r//4), r//2)
+
+    def _draw_medium_tree(self, surface: pygame.Surface, x: int, ground_y: int):
+        """Draw a smaller tree for the right side."""
+        trunk_width = 30
+        trunk_height = 180
+
+        # Trunk
+        trunk_points = [
+            (x - trunk_width//2, ground_y),
+            (x - trunk_width//3, ground_y - trunk_height),
+            (x + trunk_width//3, ground_y - trunk_height),
+            (x + trunk_width//2, ground_y),
+        ]
+        pygame.draw.polygon(surface, Palette.TREE_TRUNK, trunk_points)
+
+        # Canopy
+        canopy_y = ground_y - trunk_height - 30
+        canopy_circles = [
+            (x, canopy_y, 80),
+            (x - 50, canopy_y + 20, 50),
+            (x + 50, canopy_y + 20, 50),
+            (x - 30, canopy_y - 30, 45),
+            (x + 30, canopy_y - 30, 45),
+        ]
+
+        for cx, cy, r in canopy_circles:
+            pygame.draw.circle(surface, Palette.TREE_LEAVES_DARK, (cx + 5, cy + 5), r)
+
+        for cx, cy, r in canopy_circles:
+            pygame.draw.circle(surface, Palette.TREE_LEAVES, (cx, cy), r)
+
+        for cx, cy, r in canopy_circles:
+            pygame.draw.circle(surface, Palette.TREE_LEAVES_LIGHT,
+                             (cx - r//4, cy - r//4), r//3)
+
+    def _draw_bushes(self, surface: pygame.Surface, ground_y: int):
+        """Draw decorative bushes."""
+        bush_positions = [
+            (80, ground_y - 5, 40),
+            (300, ground_y - 8, 35),
+            (500, ground_y - 5, 45),
+            (750, ground_y - 6, 38),
+            (950, ground_y - 5, 42),
+            (1150, ground_y - 7, 36),
+        ]
+
+        for bx, by, size in bush_positions:
+            if bx < self.screen_width:
+                # Bush shadow
+                pygame.draw.ellipse(surface, Palette.BUSH_GREEN,
+                                  (bx - size + 3, by - size//2 + 3, size * 2, size))
+                # Main bush
+                pygame.draw.ellipse(surface, Palette.BUSH_LIGHT,
+                                  (bx - size, by - size//2, size * 2, size))
+                # Highlight
+                pygame.draw.ellipse(surface, (130, 190, 110),
+                                  (bx - size//2, by - size//2, size, size//2))
+
+    def _draw_grass_ground(self, surface: pygame.Surface, ground_y: int):
+        """Draw the main grass ground with subtle hills."""
+        # Main grass area
+        grass_rect = pygame.Rect(0, ground_y, self.screen_width, self.screen_height - ground_y)
+        pygame.draw.rect(surface, Palette.GRASS_GREEN, grass_rect)
+
+        # Add rolling hill effect on top edge
+        for x in range(0, self.screen_width, 3):
+            hill_offset = math.sin(x * 0.02) * 8 + math.sin(x * 0.05) * 4
+            pygame.draw.line(surface, Palette.GRASS_BRIGHT,
+                           (x, ground_y + hill_offset),
+                           (x, ground_y + hill_offset + 15))
+
+    def _draw_grass_details(self, surface: pygame.Surface, ground_y: int):
+        """Draw grass tufts and flowers."""
+        # Grass tufts along the ground
+        for x in range(20, self.screen_width - 20, 35):
+            tuft_y = ground_y + 5 + (x * 7) % 15
+            self._draw_grass_tuft(surface, x, tuft_y)
+
+        # Flowers scattered on the grass
+        flower_positions = [
+            (120, ground_y + 40, Palette.FLOWER_YELLOW),
+            (250, ground_y + 55, Palette.FLOWER_PINK),
+            (380, ground_y + 35, Palette.FLOWER_WHITE),
+            (520, ground_y + 50, Palette.FLOWER_PURPLE),
+            (650, ground_y + 42, Palette.FLOWER_YELLOW),
+            (780, ground_y + 58, Palette.FLOWER_PINK),
+            (900, ground_y + 38, Palette.FLOWER_WHITE),
+            (1050, ground_y + 48, Palette.FLOWER_YELLOW),
+            (1180, ground_y + 52, Palette.FLOWER_PURPLE),
+        ]
+
+        for fx, fy, color in flower_positions:
+            if fx < self.screen_width:
+                self._draw_flower(surface, fx, fy, color)
+
+    def _draw_grass_tuft(self, surface: pygame.Surface, x: int, y: int):
+        """Draw a small grass tuft."""
+        for i, offset in enumerate([-6, -3, 0, 3, 6]):
+            height = 15 + (i % 3) * 5
+            blade_color = Palette.GRASS_BRIGHT if i % 2 == 0 else Palette.GRASS_LIGHT
+            points = [
+                (x + offset - 2, y),
+                (x + offset, y - height),
+                (x + offset + 2, y),
+            ]
+            pygame.draw.polygon(surface, blade_color, points)
+
+    def _draw_flower(self, surface: pygame.Surface, x: int, y: int, color: Tuple[int, int, int]):
+        """Draw a simple cartoon flower."""
+        # Stem
+        pygame.draw.line(surface, Palette.GRASS_DARK, (x, y), (x, y - 15), 2)
+
+        # Petals
+        petal_size = 6
+        for angle in range(0, 360, 72):
+            rad = math.radians(angle)
+            px = x + math.cos(rad) * 5
+            py = y - 15 + math.sin(rad) * 5
+            pygame.draw.circle(surface, color, (int(px), int(py)), petal_size)
+
+        # Center
+        pygame.draw.circle(surface, Palette.WARM_YELLOW, (x, y - 15), 4)
 
     def _create_balloon(self, size: int) -> pygame.Surface:
         """Create a cartoon balloon surface."""
-        # Make surface larger to fit string
         surface = pygame.Surface((size, size + 60), pygame.SRCALPHA)
 
         center_x = size // 2
@@ -158,13 +379,11 @@ class AssetGenerator:
         ], 2)
 
         # String (curvy)
-        string_start = (center_x, knot_y + 12)
+        prev_x, prev_y = center_x, knot_y + 12
         for i in range(30):
             y = knot_y + 12 + i * 1.5
             x = center_x + math.sin(i * 0.3) * 5
-            if i > 0:
-                pygame.draw.line(surface, Palette.NAVY,
-                               (prev_x, prev_y), (x, y), 2)
+            pygame.draw.line(surface, Palette.NAVY, (prev_x, prev_y), (x, y), 2)
             prev_x, prev_y = x, y
 
         return surface
@@ -185,7 +404,6 @@ class AssetGenerator:
         ]
 
         for px, py, ps in pieces:
-            # Draw irregular balloon piece
             points = []
             for i in range(6):
                 angle = i * math.pi / 3 + (px % 10) * 0.1
@@ -209,23 +427,24 @@ class AssetGenerator:
 
         return surface
 
-    def _create_cloud(self, width: int, height: int) -> pygame.Surface:
-        """Create a cartoon cloud."""
-        surface = pygame.Surface((width, height), pygame.SRCALPHA)
+    def _create_fluffy_cloud(self, width: int, height: int) -> pygame.Surface:
+        """Create a fluffy Bluey-style cloud."""
+        surface = pygame.Surface((width + 20, height + 20), pygame.SRCALPHA)
 
-        # Draw overlapping circles for fluffy cloud effect
+        # More circles for fluffier cloud
         circles = [
-            (width // 4, height // 2, height // 3),
-            (width // 2, height // 3, height // 2.5),
-            (width * 3 // 4, height // 2, height // 3),
-            (width // 3, height // 2, height // 4),
-            (width * 2 // 3, height // 2, height // 4),
+            (width // 4 + 10, height // 2 + 10, height // 2.5),
+            (width // 2 + 10, height // 3 + 10, height // 2),
+            (width * 3 // 4 + 10, height // 2 + 10, height // 2.5),
+            (width // 3 + 10, height // 2 + 5, height // 3),
+            (width * 2 // 3 + 10, height // 2 + 5, height // 3),
+            (width // 2 + 10, height // 2 + 10, height // 3),
         ]
 
         # Shadow
         for cx, cy, r in circles:
-            pygame.draw.circle(surface, (200, 220, 240),
-                              (int(cx) + 3, int(cy) + 3), int(r))
+            pygame.draw.circle(surface, (220, 235, 250),
+                              (int(cx) + 4, int(cy) + 4), int(r))
 
         # White cloud
         for cx, cy, r in circles:
@@ -235,35 +454,35 @@ class AssetGenerator:
         return surface
 
     def _create_sun(self, size: int) -> pygame.Surface:
-        """Create a cartoon sun."""
+        """Create a cartoon sun with a happy face."""
         surface = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
         center = size
 
         # Sun rays
-        ray_color = (255, 230, 150)
+        ray_color = (255, 230, 130)
         for i in range(12):
             angle = i * math.pi / 6
-            inner_r = size // 2 + 5
-            outer_r = size - 5
+            inner_r = size // 2 + 8
+            outer_r = size - 3
             x1 = center + math.cos(angle) * inner_r
             y1 = center + math.sin(angle) * inner_r
             x2 = center + math.cos(angle) * outer_r
             y2 = center + math.sin(angle) * outer_r
-            pygame.draw.line(surface, ray_color, (x1, y1), (x2, y2), 6)
+            pygame.draw.line(surface, ray_color, (x1, y1), (x2, y2), 8)
 
         # Main sun circle
         pygame.draw.circle(surface, Palette.WARM_YELLOW, (center, center), size // 2)
-        pygame.draw.circle(surface, Palette.ORANGE, (center, center), size // 2, 3)
+        pygame.draw.circle(surface, Palette.ORANGE, (center, center), size // 2, 4)
 
         # Happy face
-        eye_y = center - 5
-        pygame.draw.circle(surface, Palette.BLACK, (center - 10, eye_y), 4)
-        pygame.draw.circle(surface, Palette.BLACK, (center + 10, eye_y), 4)
+        eye_y = center - 8
+        pygame.draw.circle(surface, Palette.BLACK, (center - 12, eye_y), 5)
+        pygame.draw.circle(surface, Palette.BLACK, (center + 12, eye_y), 5)
 
         # Smile
-        smile_rect = pygame.Rect(center - 12, center - 5, 24, 20)
+        smile_rect = pygame.Rect(center - 15, center - 8, 30, 25)
         pygame.draw.arc(surface, Palette.BLACK, smile_rect,
-                       math.pi + 0.3, 2 * math.pi - 0.3, 3)
+                       math.pi + 0.2, 2 * math.pi - 0.2, 4)
 
         return surface
 
@@ -271,7 +490,6 @@ class AssetGenerator:
         """Create a wind indicator arrow."""
         surface = pygame.Surface((size, size), pygame.SRCALPHA)
 
-        # Arrow body
         arrow_points = [
             (5, size // 2 - 8),
             (size - 15, size // 2 - 8),
@@ -294,34 +512,9 @@ class AssetGenerator:
 
         return surface
 
-    def _create_grass_tuft(self, width: int, height: int) -> pygame.Surface:
-        """Create a grass tuft decoration."""
-        surface = pygame.Surface((width, height), pygame.SRCALPHA)
-
-        # Draw grass blades
-        blades = [
-            (width // 4, 0.8),
-            (width // 2, 1.0),
-            (width * 3 // 4, 0.85),
-            (width // 3, 0.7),
-            (width * 2 // 3, 0.75),
-        ]
-
-        for bx, height_factor in blades:
-            blade_height = int(height * height_factor)
-            points = [
-                (bx - 3, height),
-                (bx, height - blade_height),
-                (bx + 3, height),
-            ]
-            pygame.draw.polygon(surface, Palette.GRASS_GREEN, points)
-
-        return surface
-
 
 def create_game_font(size: int) -> pygame.font.Font:
     """Create a font for game text (uses system font for compatibility)."""
-    # Try to use a fun, rounded font if available
     try:
         return pygame.font.SysFont('Comic Sans MS', size)
     except:
