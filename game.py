@@ -11,7 +11,7 @@ from enum import Enum
 
 from player_detection import PlayerDetector, PlayerLandmarks
 from balloon import BalloonPhysics
-from avatar import AvatarRenderer, Colors
+from avatar import AvatarRenderer, BlueyColors
 from scoring import ScoringSystem
 from assets_generator import AssetGenerator, Palette, create_game_font
 
