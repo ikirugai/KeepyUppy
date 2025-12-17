@@ -1,7 +1,6 @@
 """
-Avatar Rendering System - Bluey Character Style
-Renders Bluey, Bingo, Mum (Chilli), and Dad (Bandit) style dog avatars.
-Supports both sprite-based and procedurally drawn characters.
+Avatar Rendering System - Bluey Character Sprites
+Renders Bluey, Bingo, Bandit, and Chilli with limb extensions that follow body tracking.
 """
 
 import pygame
@@ -11,73 +10,65 @@ from typing import Optional, Tuple, List, Dict
 from player_detection import PlayerLandmarks
 
 
-class BlueyColors:
-    """Color palettes for each Bluey character."""
+class CharacterConfig:
+    """Configuration for each character sprite."""
 
-    # Bluey - Blue Heeler puppy
-    BLUEY = {
-        'fur_main': (108, 172, 228),
-        'fur_dark': (70, 130, 180),
-        'fur_belly': (168, 210, 240),
-        'nose': (45, 45, 55),
-        'eye_white': (255, 255, 255),
-        'eye_pupil': (35, 35, 45),
-        'eye_shine': (255, 255, 255),
-        'tongue': (240, 150, 150),
-        'inner_ear': (240, 180, 170),
-        'outline': (50, 80, 120),
-    }
-
-    # Bingo - Red Heeler puppy
-    BINGO = {
-        'fur_main': (235, 150, 90),
-        'fur_dark': (190, 100, 60),
-        'fur_belly': (255, 220, 190),
-        'nose': (45, 45, 55),
-        'eye_white': (255, 255, 255),
-        'eye_pupil': (35, 35, 45),
-        'eye_shine': (255, 255, 255),
-        'tongue': (240, 150, 150),
-        'inner_ear': (240, 180, 170),
-        'outline': (120, 70, 40),
-    }
-
-    # Chilli - Mum
-    CHILLI = {
-        'fur_main': (220, 120, 80),
-        'fur_dark': (180, 90, 60),
-        'fur_belly': (250, 210, 180),
-        'nose': (45, 45, 55),
-        'eye_white': (255, 255, 255),
-        'eye_pupil': (35, 35, 45),
-        'eye_shine': (255, 255, 255),
-        'tongue': (240, 150, 150),
-        'inner_ear': (240, 180, 170),
-        'outline': (100, 60, 40),
-        'shirt': (120, 180, 140),
-    }
-
-    # Bandit - Dad
-    BANDIT = {
-        'fur_main': (90, 140, 190),
-        'fur_dark': (60, 100, 150),
-        'fur_belly': (150, 190, 220),
-        'nose': (45, 45, 55),
-        'eye_white': (255, 255, 255),
-        'eye_pupil': (35, 35, 45),
-        'eye_shine': (255, 255, 255),
-        'tongue': (240, 150, 150),
-        'inner_ear': (240, 180, 170),
-        'outline': (40, 70, 110),
-        'shirt': (200, 140, 80),
-    }
-
-    CHARACTERS = [BLUEY, BINGO, CHILLI, BANDIT]
-    CHARACTER_NAMES = ['Bluey', 'Bingo', 'Mum', 'Dad']
+    # Character order: Player 1 = Bluey, 2 = Bingo, 3 = Bandit (Dad), 4 = Chilli (Mum)
+    CHARACTERS = [
+        {
+            'name': 'bluey',
+            'file': 'bluey.png',
+            'fur_color': (147, 200, 230),      # Light blue
+            'fur_dark': (90, 140, 180),        # Darker blue
+            'paw_color': (200, 225, 240),      # Light paw
+            'outline': (50, 80, 120),
+            # Approximate positions in sprite (as ratios of sprite size)
+            'left_shoulder': (0.22, 0.42),     # Where left arm connects
+            'right_shoulder': (0.78, 0.42),    # Where right arm connects
+            'left_hip': (0.30, 0.75),          # Where left leg connects
+            'right_hip': (0.70, 0.75),         # Where right leg connects
+        },
+        {
+            'name': 'bingo',
+            'file': 'bingo.png',
+            'fur_color': (230, 170, 130),      # Orange/tan
+            'fur_dark': (190, 120, 80),        # Darker orange
+            'paw_color': (250, 240, 220),      # Light paw
+            'outline': (120, 70, 40),
+            'left_shoulder': (0.20, 0.45),
+            'right_shoulder': (0.80, 0.45),
+            'left_hip': (0.32, 0.78),
+            'right_hip': (0.68, 0.78),
+        },
+        {
+            'name': 'bandit',
+            'file': 'bandit.png',
+            'fur_color': (160, 200, 230),      # Light blue (dad)
+            'fur_dark': (60, 80, 100),         # Dark blue/black
+            'paw_color': (240, 240, 245),      # White paws
+            'outline': (40, 50, 70),
+            'left_shoulder': (0.18, 0.40),
+            'right_shoulder': (0.75, 0.40),
+            'left_hip': (0.28, 0.78),
+            'right_hip': (0.55, 0.78),
+        },
+        {
+            'name': 'chilli',
+            'file': 'chilli.png',
+            'fur_color': (235, 180, 150),      # Orange/peach (mum)
+            'fur_dark': (160, 100, 70),        # Brown
+            'paw_color': (250, 245, 235),      # Light paw
+            'outline': (100, 60, 40),
+            'left_shoulder': (0.20, 0.38),
+            'right_shoulder': (0.72, 0.38),
+            'left_hip': (0.25, 0.80),
+            'right_hip': (0.50, 0.80),
+        },
+    ]
 
 
 class AvatarRenderer:
-    """Renders Bluey-style dog avatars for detected players."""
+    """Renders Bluey character sprites with dynamic limb extensions."""
 
     def __init__(self, screen_width: int, screen_height: int):
         self.screen_width = screen_width
@@ -87,127 +78,231 @@ class AvatarRenderer:
         self.smooth_factor = 0.4
         self.previous_positions: Dict[str, Tuple[float, float]] = {}
 
-        # Line thickness for outlines
-        self.outline_width = 3
-
         # Load character sprites
         self.sprites = {}
+        self.configs = {}
         self._load_sprites()
 
     def _load_sprites(self):
-        """Load character sprite images."""
+        """Load all character sprite images."""
         assets_dir = os.path.join(os.path.dirname(__file__), 'assets')
 
-        # Try to load Bluey sprite
-        bluey_path = os.path.join(assets_dir, 'bluey.png')
-        if os.path.exists(bluey_path):
-            try:
-                self.sprites['bluey'] = pygame.image.load(bluey_path).convert_alpha()
-                print(f"Loaded Bluey sprite: {self.sprites['bluey'].get_size()}")
-            except Exception as e:
-                print(f"Could not load Bluey sprite: {e}")
+        for config in CharacterConfig.CHARACTERS:
+            name = config['name']
+            sprite_path = os.path.join(assets_dir, config['file'])
 
-        # Try to load other character sprites if they exist
-        for name in ['bingo', 'mum', 'dad']:
-            sprite_path = os.path.join(assets_dir, f'{name}.png')
             if os.path.exists(sprite_path):
                 try:
-                    self.sprites[name] = pygame.image.load(sprite_path).convert_alpha()
-                    print(f"Loaded {name} sprite")
+                    sprite = pygame.image.load(sprite_path).convert_alpha()
+                    self.sprites[name] = sprite
+                    self.configs[name] = config
+                    print(f"Loaded {name} sprite: {sprite.get_size()}")
                 except Exception as e:
                     print(f"Could not load {name} sprite: {e}")
 
     def render_player(self, surface: pygame.Surface, player: PlayerLandmarks,
                      player_index: int = 0):
-        """Render a Bluey-style dog avatar for a player."""
+        """Render a character with limb extensions."""
         if not player.is_visible:
             return
 
-        # Get character info
-        colors = BlueyColors.CHARACTERS[player_index % len(BlueyColors.CHARACTERS)]
-        char_name = BlueyColors.CHARACTER_NAMES[player_index % len(BlueyColors.CHARACTER_NAMES)]
+        # Get character config
+        config_index = player_index % len(CharacterConfig.CHARACTERS)
+        config = CharacterConfig.CHARACTERS[config_index]
+        char_name = config['name']
 
         # Get smoothed positions
         positions = self._get_smoothed_positions(player, player_index)
         if not positions:
             return
 
-        # Calculate body scale
+        # Calculate body metrics
         body_scale = self._calculate_body_scale(positions)
+        sprite_bounds = self._calculate_sprite_bounds(positions, body_scale)
 
-        # Check if we have a sprite for this character
-        sprite_key = char_name.lower()
-        if sprite_key in self.sprites:
-            self._render_sprite_character(surface, positions, self.sprites[sprite_key], body_scale)
-        else:
-            # Fall back to procedural drawing
-            self._render_procedural_character(surface, positions, colors, body_scale, char_name)
+        if not sprite_bounds:
+            return
 
-        # Always draw paws at hand positions for collision feedback
-        self._draw_hand_indicators(surface, positions, colors, body_scale)
+        sprite_x, sprite_y, sprite_width, sprite_height = sprite_bounds
 
-    def _render_sprite_character(self, surface: pygame.Surface, positions: Dict,
-                                  sprite: pygame.Surface, scale: float):
-        """Render a character using a sprite image."""
+        # Calculate limb thickness based on sprite size
+        limb_thickness = max(12, int(sprite_width * 0.08))
+        paw_size = max(20, int(sprite_width * 0.12))
+
+        # Calculate where limbs connect on the sprite
+        left_shoulder_pos = (
+            sprite_x + sprite_width * config['left_shoulder'][0],
+            sprite_y + sprite_height * config['left_shoulder'][1]
+        )
+        right_shoulder_pos = (
+            sprite_x + sprite_width * config['right_shoulder'][0],
+            sprite_y + sprite_height * config['right_shoulder'][1]
+        )
+        left_hip_pos = (
+            sprite_x + sprite_width * config['left_hip'][0],
+            sprite_y + sprite_height * config['left_hip'][1]
+        )
+        right_hip_pos = (
+            sprite_x + sprite_width * config['right_hip'][0],
+            sprite_y + sprite_height * config['right_hip'][1]
+        )
+
+        # Draw limbs BEHIND the sprite
+        # Draw legs first (furthest back)
+        if positions.get('left_ankle') or positions.get('left_knee'):
+            foot_pos = positions.get('left_ankle') or positions.get('left_knee')
+            self._draw_limb(surface, left_hip_pos, foot_pos, limb_thickness, config, is_leg=True)
+            self._draw_paw(surface, foot_pos, paw_size, config, is_foot=True)
+
+        if positions.get('right_ankle') or positions.get('right_knee'):
+            foot_pos = positions.get('right_ankle') or positions.get('right_knee')
+            self._draw_limb(surface, right_hip_pos, foot_pos, limb_thickness, config, is_leg=True)
+            self._draw_paw(surface, foot_pos, paw_size, config, is_foot=True)
+
+        # Draw arms
+        if positions.get('left_hand'):
+            self._draw_limb(surface, left_shoulder_pos, positions['left_hand'], limb_thickness, config)
+            self._draw_paw(surface, positions['left_hand'], paw_size, config)
+
+        if positions.get('right_hand'):
+            self._draw_limb(surface, right_shoulder_pos, positions['right_hand'], limb_thickness, config)
+            self._draw_paw(surface, positions['right_hand'], paw_size, config)
+
+        # Draw the sprite on top
+        if char_name in self.sprites:
+            sprite = self.sprites[char_name]
+            scaled_sprite = pygame.transform.smoothscale(sprite, (int(sprite_width), int(sprite_height)))
+            surface.blit(scaled_sprite, (int(sprite_x), int(sprite_y)))
+
+    def _calculate_sprite_bounds(self, positions: Dict, scale: float) -> Optional[Tuple[float, float, float, float]]:
+        """Calculate where to position and how to size the sprite."""
         neck = positions.get('neck')
         hip_center = positions.get('hip_center')
+        nose = positions.get('nose')
 
         if not neck:
-            return
+            return None
 
         # Calculate body center
         if hip_center:
             body_center_x = (neck[0] + hip_center[0]) / 2
             body_center_y = (neck[1] + hip_center[1]) / 2
+            body_height = abs(hip_center[1] - neck[1]) * 2.8
         else:
             body_center_x = neck[0]
             body_center_y = neck[1] + 100
+            body_height = 350 * scale
 
-        # Calculate target size based on body detection
-        # The sprite should cover from above head to below hips
-        if hip_center:
-            body_height = abs(hip_center[1] - neck[1]) * 2.5
+        # If we have nose, extend up to include head
+        if nose:
+            head_space = abs(neck[1] - nose[1]) * 1.5
+            body_height = body_height + head_space
+            body_center_y = body_center_y - head_space * 0.2
+
+        # Calculate dimensions maintaining aspect ratio (roughly 0.67 width:height for these sprites)
+        aspect_ratio = 0.67
+        sprite_height = body_height
+        sprite_width = sprite_height * aspect_ratio
+
+        sprite_x = body_center_x - sprite_width / 2
+        sprite_y = body_center_y - sprite_height / 2 - sprite_height * 0.05
+
+        return (sprite_x, sprite_y, sprite_width, sprite_height)
+
+    def _draw_limb(self, surface: pygame.Surface, start: Tuple[float, float],
+                   end: Tuple[float, float], thickness: int, config: Dict, is_leg: bool = False):
+        """Draw a limb extension from sprite to detected position."""
+        start_pos = (int(start[0]), int(start[1]))
+        end_pos = (int(end[0]), int(end[1]))
+
+        fur_color = config['fur_color']
+        fur_dark = config['fur_dark']
+        outline_color = config['outline']
+
+        # Calculate direction and perpendicular
+        dx = end_pos[0] - start_pos[0]
+        dy = end_pos[1] - start_pos[1]
+        length = max(1, math.sqrt(dx * dx + dy * dy))
+        nx, ny = -dy / length, dx / length
+
+        half_width = thickness // 2
+
+        # Create limb polygon
+        points = [
+            (start_pos[0] + nx * half_width, start_pos[1] + ny * half_width),
+            (start_pos[0] - nx * half_width, start_pos[1] - ny * half_width),
+            (end_pos[0] - nx * half_width, end_pos[1] - ny * half_width),
+            (end_pos[0] + nx * half_width, end_pos[1] + ny * half_width),
+        ]
+
+        # Draw shadow
+        shadow_offset = 3
+        shadow_points = [(p[0] + shadow_offset, p[1] + shadow_offset) for p in points]
+        pygame.draw.polygon(surface, self._darken(fur_color, 0.4), shadow_points)
+
+        # Draw main limb
+        pygame.draw.polygon(surface, fur_color, points)
+
+        # Draw stripe/marking for legs
+        if is_leg and length > 30:
+            stripe_start = (
+                start_pos[0] + dx * 0.6,
+                start_pos[1] + dy * 0.6
+            )
+            stripe_end = (
+                start_pos[0] + dx * 0.8,
+                start_pos[1] + dy * 0.8
+            )
+            stripe_points = [
+                (stripe_start[0] + nx * half_width * 0.9, stripe_start[1] + ny * half_width * 0.9),
+                (stripe_start[0] - nx * half_width * 0.9, stripe_start[1] - ny * half_width * 0.9),
+                (stripe_end[0] - nx * half_width * 0.9, stripe_end[1] - ny * half_width * 0.9),
+                (stripe_end[0] + nx * half_width * 0.9, stripe_end[1] + ny * half_width * 0.9),
+            ]
+            pygame.draw.polygon(surface, config['paw_color'], stripe_points)
+
+        # Draw outline
+        pygame.draw.polygon(surface, outline_color, points, 2)
+
+        # Draw joint circles for smooth connections
+        pygame.draw.circle(surface, fur_color, start_pos, half_width)
+        pygame.draw.circle(surface, outline_color, start_pos, half_width, 2)
+        pygame.draw.circle(surface, fur_color, end_pos, half_width)
+        pygame.draw.circle(surface, outline_color, end_pos, half_width, 2)
+
+    def _draw_paw(self, surface: pygame.Surface, position: Tuple[float, float],
+                  size: int, config: Dict, is_foot: bool = False):
+        """Draw a cartoon paw at the given position."""
+        x, y = int(position[0]), int(position[1])
+
+        paw_color = config['paw_color']
+        outline_color = config['outline']
+
+        # Draw shadow
+        pygame.draw.ellipse(surface, self._darken(paw_color, 0.5),
+                           (x - size // 2 + 3, y - size // 2 + 3, size, size))
+
+        # Draw main paw
+        pygame.draw.ellipse(surface, paw_color,
+                           (x - size // 2, y - size // 2, size, size))
+
+        # Draw paw pads
+        pad_color = (70, 70, 80)
+        if is_foot:
+            # Larger central pad for feet
+            pygame.draw.ellipse(surface, pad_color,
+                              (x - size // 4, y - size // 6, size // 2, size // 3))
         else:
-            body_height = 300 * scale
+            # Three toe pads for hands
+            pad_size = size // 5
+            for offset in [-1, 0, 1]:
+                pad_x = x + offset * (size // 4)
+                pad_y = y - size // 6
+                pygame.draw.circle(surface, pad_color, (pad_x, pad_y), pad_size // 2)
 
-        # Maintain aspect ratio
-        orig_width, orig_height = sprite.get_size()
-        aspect_ratio = orig_width / orig_height
-        target_height = int(body_height)
-        target_width = int(target_height * aspect_ratio)
-
-        # Scale the sprite
-        scaled_sprite = pygame.transform.smoothscale(sprite, (target_width, target_height))
-
-        # Position sprite (center it on body)
-        sprite_x = body_center_x - target_width // 2
-        sprite_y = body_center_y - target_height // 2 - target_height * 0.1  # Shift up slightly
-
-        # Draw the sprite
-        surface.blit(scaled_sprite, (int(sprite_x), int(sprite_y)))
-
-    def _render_procedural_character(self, surface: pygame.Surface, positions: Dict,
-                                      colors: Dict, scale: float, char_name: str):
-        """Render a character using procedural drawing."""
-        # Draw character parts in order (back to front)
-        self._draw_tail(surface, positions, colors, scale)
-        self._draw_legs(surface, positions, colors, scale)
-        self._draw_body(surface, positions, colors, scale, char_name)
-        self._draw_arms(surface, positions, colors, scale)
-        self._draw_head(surface, positions, colors, scale, char_name)
-
-    def _draw_hand_indicators(self, surface: pygame.Surface, positions: Dict,
-                              colors: Dict, scale: float):
-        """Draw small indicators at hand positions for collision feedback."""
-        paw_size = int(20 * scale)
-
-        for hand_key in ['left_hand', 'right_hand']:
-            hand = positions.get(hand_key)
-            if hand:
-                x, y = int(hand[0]), int(hand[1])
-                # Draw a subtle paw indicator
-                pygame.draw.circle(surface, (255, 255, 255, 150), (x, y), paw_size)
-                pygame.draw.circle(surface, colors['outline'], (x, y), paw_size, 2)
+        # Draw outline
+        pygame.draw.ellipse(surface, outline_color,
+                           (x - size // 2, y - size // 2, size, size), 2)
 
     def _get_smoothed_positions(self, player: PlayerLandmarks,
                                 player_index: int) -> Optional[Dict]:
@@ -247,27 +342,26 @@ class AvatarRenderer:
             'right_ankle': smooth(player.right_ankle, 'r_ankle'),
         }
 
-        if not positions['nose'] or not positions['left_shoulder'] or not positions['right_shoulder']:
+        if not positions['left_shoulder'] or not positions['right_shoulder']:
             return None
 
-        if positions['left_shoulder'] and positions['right_shoulder']:
-            positions['neck'] = (
-                (positions['left_shoulder'][0] + positions['right_shoulder'][0]) / 2,
-                (positions['left_shoulder'][1] + positions['right_shoulder'][1]) / 2
-            )
+        # Calculate neck position
+        positions['neck'] = (
+            (positions['left_shoulder'][0] + positions['right_shoulder'][0]) / 2,
+            (positions['left_shoulder'][1] + positions['right_shoulder'][1]) / 2
+        )
 
+        # Calculate hip center
         if positions['left_hip'] and positions['right_hip']:
             positions['hip_center'] = (
                 (positions['left_hip'][0] + positions['right_hip'][0]) / 2,
                 (positions['left_hip'][1] + positions['right_hip'][1]) / 2
             )
-        elif positions['neck']:
+        else:
             positions['hip_center'] = (
                 positions['neck'][0],
                 positions['neck'][1] + 150
             )
-            positions['left_hip'] = (positions['hip_center'][0] - 40, positions['hip_center'][1])
-            positions['right_hip'] = (positions['hip_center'][0] + 40, positions['hip_center'][1])
 
         return positions
 
@@ -278,317 +372,8 @@ class AvatarRenderer:
             return max(0.5, min(2.0, shoulder_width / 150))
         return 1.0
 
-    def _draw_body(self, surface: pygame.Surface, positions: Dict,
-                   colors: Dict, scale: float, char_name: str):
-        """Draw the torso/body."""
-        neck = positions.get('neck')
-        hip_center = positions.get('hip_center')
-        left_shoulder = positions.get('left_shoulder')
-        right_shoulder = positions.get('right_shoulder')
-        left_hip = positions.get('left_hip')
-        right_hip = positions.get('right_hip')
-
-        if not all([neck, left_shoulder, right_shoulder]):
-            return
-
-        body_points = []
-        shoulder_inset = 10 * scale
-
-        if left_shoulder:
-            body_points.append((left_shoulder[0] + shoulder_inset, left_shoulder[1]))
-        if right_shoulder:
-            body_points.append((right_shoulder[0] - shoulder_inset, right_shoulder[1]))
-        if right_hip:
-            body_points.append((right_hip[0] - shoulder_inset, right_hip[1]))
-        if left_hip:
-            body_points.append((left_hip[0] + shoulder_inset, left_hip[1]))
-
-        if len(body_points) >= 3:
-            shadow_points = [(p[0] + 4, p[1] + 4) for p in body_points]
-            pygame.draw.polygon(surface, self._darken(colors['fur_main'], 0.5), shadow_points)
-            pygame.draw.polygon(surface, colors['fur_main'], body_points)
-
-            if neck and hip_center:
-                belly_center = (
-                    int((neck[0] + hip_center[0]) / 2),
-                    int((neck[1] + hip_center[1]) / 2 + 20 * scale)
-                )
-                belly_width = int(50 * scale)
-                belly_height = int(80 * scale)
-                belly_rect = pygame.Rect(
-                    belly_center[0] - belly_width // 2,
-                    belly_center[1] - belly_height // 2,
-                    belly_width, belly_height
-                )
-                pygame.draw.ellipse(surface, colors['fur_belly'], belly_rect)
-
-            if char_name in ['Mum', 'Dad'] and 'shirt' in colors:
-                shirt_points = body_points[:2] + [
-                    ((body_points[1][0] + body_points[2][0]) / 2,
-                     (body_points[1][1] + body_points[2][1]) / 2),
-                    ((body_points[0][0] + body_points[3][0]) / 2,
-                     (body_points[0][1] + body_points[3][1]) / 2),
-                ]
-                pygame.draw.polygon(surface, colors['shirt'], shirt_points)
-
-            pygame.draw.polygon(surface, colors['outline'], body_points, self.outline_width)
-
-    def _draw_head(self, surface: pygame.Surface, positions: Dict,
-                   colors: Dict, scale: float, char_name: str):
-        """Draw the dog head with ears, snout, and eyes."""
-        nose_pos = positions.get('nose')
-        neck = positions.get('neck')
-
-        if not nose_pos:
-            return
-
-        if neck:
-            head_x = int((nose_pos[0] * 0.7 + neck[0] * 0.3))
-            head_y = int((nose_pos[1] * 0.7 + neck[1] * 0.3))
-        else:
-            head_x, head_y = int(nose_pos[0]), int(nose_pos[1])
-
-        head_width = int(70 * scale)
-        head_height = int(60 * scale)
-
-        self._draw_ears(surface, head_x, head_y, head_width, head_height, colors, scale)
-
-        pygame.draw.ellipse(surface, self._darken(colors['fur_main'], 0.5),
-                           (head_x - head_width // 2 + 4, head_y - head_height // 2 + 4,
-                            head_width, head_height))
-        pygame.draw.ellipse(surface, colors['fur_main'],
-                           (head_x - head_width // 2, head_y - head_height // 2,
-                            head_width, head_height))
-
-        self._draw_face_markings(surface, head_x, head_y, head_width, colors, scale)
-        self._draw_snout(surface, head_x, head_y, head_height, colors, scale)
-        self._draw_eyes(surface, head_x, head_y, head_width, colors, scale)
-
-        pygame.draw.ellipse(surface, colors['outline'],
-                           (head_x - head_width // 2, head_y - head_height // 2,
-                            head_width, head_height), self.outline_width)
-
-    def _draw_ears(self, surface: pygame.Surface, head_x: int, head_y: int,
-                   head_width: int, head_height: int, colors: Dict, scale: float):
-        """Draw floppy dog ears."""
-        ear_width = int(25 * scale)
-        ear_height = int(40 * scale)
-
-        for side in [-1, 1]:
-            ear_x = head_x + side * (head_width // 2 - 5)
-            ear_y = head_y - head_height // 3
-
-            ear_points = [
-                (ear_x, ear_y),
-                (ear_x + side * ear_width, ear_y + ear_height // 2),
-                (ear_x + side * ear_width * 0.7, ear_y + ear_height),
-                (ear_x, ear_y + ear_height * 0.6),
-            ]
-
-            shadow_points = [(p[0] + 3, p[1] + 3) for p in ear_points]
-            pygame.draw.polygon(surface, self._darken(colors['fur_main'], 0.5), shadow_points)
-            pygame.draw.polygon(surface, colors['fur_dark'], ear_points)
-
-            inner_points = [
-                (ear_x + side * 5, ear_y + 8),
-                (ear_x + side * (ear_width - 8), ear_y + ear_height // 2),
-                (ear_x + side * (ear_width * 0.6), ear_y + ear_height - 10),
-                (ear_x + side * 5, ear_y + ear_height * 0.5),
-            ]
-            pygame.draw.polygon(surface, colors['inner_ear'], inner_points)
-            pygame.draw.polygon(surface, colors['outline'], ear_points, 2)
-
-    def _draw_face_markings(self, surface: pygame.Surface, head_x: int, head_y: int,
-                            head_width: int, colors: Dict, scale: float):
-        """Draw darker fur patches on face."""
-        patch_size = int(20 * scale)
-        for side in [-1, 1]:
-            patch_x = head_x + side * int(15 * scale)
-            patch_y = head_y - int(5 * scale)
-            pygame.draw.ellipse(surface, colors['fur_dark'],
-                              (patch_x - patch_size // 2, patch_y - patch_size // 2,
-                               patch_size, int(patch_size * 0.8)))
-
-    def _draw_snout(self, surface: pygame.Surface, head_x: int, head_y: int,
-                    head_height: int, colors: Dict, scale: float):
-        """Draw the dog snout/muzzle."""
-        snout_width = int(35 * scale)
-        snout_height = int(25 * scale)
-        snout_y = head_y + int(10 * scale)
-
-        snout_rect = pygame.Rect(head_x - snout_width // 2, snout_y, snout_width, snout_height)
-        pygame.draw.ellipse(surface, colors['fur_belly'], snout_rect)
-
-        nose_width = int(15 * scale)
-        nose_height = int(10 * scale)
-        nose_rect = pygame.Rect(head_x - nose_width // 2, snout_y + 2, nose_width, nose_height)
-        pygame.draw.ellipse(surface, colors['nose'], nose_rect)
-        pygame.draw.ellipse(surface, (80, 80, 90),
-                           (head_x - nose_width // 4, snout_y + 3, nose_width // 3, nose_height // 3))
-
-        mouth_y = snout_y + snout_height - 5
-        pygame.draw.arc(surface, colors['outline'],
-                       (head_x - 10, mouth_y - 5, 20, 15), 0.2, math.pi - 0.2, 2)
-
-    def _draw_eyes(self, surface: pygame.Surface, head_x: int, head_y: int,
-                   head_width: int, colors: Dict, scale: float):
-        """Draw cartoon dog eyes."""
-        eye_size = int(18 * scale)
-        pupil_size = int(10 * scale)
-        eye_y = head_y - int(8 * scale)
-        eye_spacing = int(22 * scale)
-
-        for side in [-1, 1]:
-            eye_x = head_x + side * eye_spacing
-            pygame.draw.ellipse(surface, colors['eye_white'],
-                              (eye_x - eye_size // 2, eye_y - eye_size // 2, eye_size, eye_size))
-            pupil_offset_x = side * 2
-            pygame.draw.circle(surface, colors['eye_pupil'],
-                             (eye_x + pupil_offset_x, eye_y), pupil_size // 2)
-            shine_size = int(5 * scale)
-            pygame.draw.circle(surface, colors['eye_shine'],
-                             (eye_x + pupil_offset_x - 2, eye_y - 2), shine_size // 2)
-            pygame.draw.ellipse(surface, colors['outline'],
-                              (eye_x - eye_size // 2, eye_y - eye_size // 2, eye_size, eye_size), 2)
-
-    def _draw_arms(self, surface: pygame.Surface, positions: Dict,
-                   colors: Dict, scale: float):
-        """Draw arms with paws."""
-        arm_width = int(22 * scale)
-        paw_size = int(28 * scale)
-
-        for side, (shoulder_key, elbow_key, hand_key) in [
-            ('left', ('left_shoulder', 'left_elbow', 'left_hand')),
-            ('right', ('right_shoulder', 'right_elbow', 'right_hand'))
-        ]:
-            shoulder = positions.get(shoulder_key)
-            elbow = positions.get(elbow_key)
-            hand = positions.get(hand_key)
-
-            if not shoulder:
-                continue
-
-            if elbow:
-                self._draw_limb_segment(surface, shoulder, elbow, arm_width, colors)
-                if hand:
-                    self._draw_limb_segment(surface, elbow, hand, arm_width - 4, colors)
-                    self._draw_paw(surface, hand, paw_size, colors)
-            elif hand:
-                self._draw_limb_segment(surface, shoulder, hand, arm_width, colors)
-                self._draw_paw(surface, hand, paw_size, colors)
-
-    def _draw_legs(self, surface: pygame.Surface, positions: Dict,
-                   colors: Dict, scale: float):
-        """Draw legs with paws."""
-        leg_width = int(26 * scale)
-        paw_size = int(30 * scale)
-
-        for side, (hip_key, knee_key, ankle_key) in [
-            ('left', ('left_hip', 'left_knee', 'left_ankle')),
-            ('right', ('right_hip', 'right_knee', 'right_ankle'))
-        ]:
-            hip = positions.get(hip_key)
-            knee = positions.get(knee_key)
-            ankle = positions.get(ankle_key)
-
-            if not hip:
-                continue
-
-            if knee:
-                self._draw_limb_segment(surface, hip, knee, leg_width, colors)
-                if ankle:
-                    self._draw_limb_segment(surface, knee, ankle, leg_width - 4, colors)
-                    self._draw_paw(surface, ankle, paw_size, colors, is_foot=True)
-            elif ankle:
-                self._draw_limb_segment(surface, hip, ankle, leg_width, colors)
-                self._draw_paw(surface, ankle, paw_size, colors, is_foot=True)
-
-    def _draw_limb_segment(self, surface: pygame.Surface,
-                           start: Tuple[float, float], end: Tuple[float, float],
-                           width: int, colors: Dict):
-        """Draw a single limb segment."""
-        start_pos = (int(start[0]), int(start[1]))
-        end_pos = (int(end[0]), int(end[1]))
-
-        dx = end_pos[0] - start_pos[0]
-        dy = end_pos[1] - start_pos[1]
-        length = max(1, math.sqrt(dx * dx + dy * dy))
-        nx, ny = -dy / length, dx / length
-
-        half_width = width // 2
-        points = [
-            (start_pos[0] + nx * half_width, start_pos[1] + ny * half_width),
-            (start_pos[0] - nx * half_width, start_pos[1] - ny * half_width),
-            (end_pos[0] - nx * half_width, end_pos[1] - ny * half_width),
-            (end_pos[0] + nx * half_width, end_pos[1] + ny * half_width),
-        ]
-
-        shadow_points = [(p[0] + 3, p[1] + 3) for p in points]
-        pygame.draw.polygon(surface, self._darken(colors['fur_main'], 0.5), shadow_points)
-        pygame.draw.polygon(surface, colors['fur_main'], points)
-        pygame.draw.polygon(surface, colors['outline'], points, 2)
-
-        pygame.draw.circle(surface, colors['fur_main'], start_pos, half_width)
-        pygame.draw.circle(surface, colors['outline'], start_pos, half_width, 2)
-        pygame.draw.circle(surface, colors['fur_main'], end_pos, half_width)
-        pygame.draw.circle(surface, colors['outline'], end_pos, half_width, 2)
-
-    def _draw_paw(self, surface: pygame.Surface, position: Tuple[float, float],
-                  size: int, colors: Dict, is_foot: bool = False):
-        """Draw a cartoon paw."""
-        x, y = int(position[0]), int(position[1])
-
-        pygame.draw.ellipse(surface, self._darken(colors['fur_main'], 0.5),
-                           (x - size // 2 + 3, y - size // 2 + 3, size, size))
-        pygame.draw.ellipse(surface, colors['fur_belly'],
-                           (x - size // 2, y - size // 2, size, size))
-
-        pad_color = (60, 60, 70)
-        if is_foot:
-            pygame.draw.ellipse(surface, pad_color,
-                              (x - size // 4, y - size // 6, size // 2, size // 3))
-        else:
-            pad_size = size // 5
-            for i, offset in enumerate([-1, 0, 1]):
-                pad_x = x + offset * (size // 4)
-                pad_y = y - size // 6
-                pygame.draw.circle(surface, pad_color, (pad_x, pad_y), pad_size // 2)
-
-        pygame.draw.ellipse(surface, colors['outline'],
-                           (x - size // 2, y - size // 2, size, size), 2)
-
-    def _draw_tail(self, surface: pygame.Surface, positions: Dict,
-                   colors: Dict, scale: float):
-        """Draw a wagging tail."""
-        hip_center = positions.get('hip_center')
-        if not hip_center:
-            return
-
-        tail_length = int(40 * scale)
-        tail_width = int(15 * scale)
-        wag = math.sin(pygame.time.get_ticks() / 150) * 0.4
-
-        tail_start = (hip_center[0], hip_center[1] + 10)
-        tail_mid = (tail_start[0] - tail_length * 0.5 + wag * 20, tail_start[1] - tail_length * 0.3)
-        tail_end = (tail_start[0] - tail_length * 0.8 + wag * 30, tail_start[1] - tail_length * 0.7)
-
-        points = [tail_start, tail_mid, tail_end]
-        for i in range(len(points) - 1):
-            width = tail_width - i * 4
-            self._draw_curved_segment(surface, points[i], points[i + 1], width, colors)
-
-    def _draw_curved_segment(self, surface: pygame.Surface,
-                             start: Tuple[float, float], end: Tuple[float, float],
-                             width: int, colors: Dict):
-        """Draw a curved segment."""
-        pygame.draw.line(surface, colors['outline'],
-                        (int(start[0]), int(start[1])), (int(end[0]), int(end[1])), width + 2)
-        pygame.draw.line(surface, colors['fur_main'],
-                        (int(start[0]), int(start[1])), (int(end[0]), int(end[1])), width)
-        pygame.draw.circle(surface, colors['fur_main'], (int(end[0]), int(end[1])), width // 2)
-
     def _darken(self, color: Tuple[int, int, int], factor: float) -> Tuple[int, int, int]:
-        """Darken a color."""
+        """Darken a color by a factor."""
         return (int(color[0] * factor), int(color[1] * factor), int(color[2] * factor))
 
     def get_hand_positions(self, player: PlayerLandmarks) -> List[Tuple[float, float]]:
@@ -602,4 +387,10 @@ class AvatarRenderer:
 
     def get_collision_radius(self) -> float:
         """Get collision radius for hands."""
-        return 30
+        return 35
+
+
+# Keep BlueyColors for backwards compatibility
+class BlueyColors:
+    CHARACTERS = CharacterConfig.CHARACTERS
+    CHARACTER_NAMES = ['Bluey', 'Bingo', 'Bandit', 'Chilli']

@@ -7,6 +7,7 @@ Creates the iconic Bluey park background and game elements.
 import pygame
 import math
 import random
+import os
 from typing import Tuple
 
 
@@ -86,9 +87,42 @@ class AssetGenerator:
         return self.assets
 
     def _create_bluey_park_background(self) -> pygame.Surface:
-        """Create the iconic Bluey park background."""
+        """Create the Bluey background - uses house.jpg if available, otherwise generates park."""
         surface = pygame.Surface((self.screen_width, self.screen_height))
 
+        # Try to load house.jpg background
+        assets_dir = os.path.join(os.path.dirname(__file__), 'assets')
+        house_path = os.path.join(assets_dir, 'house.jpg')
+
+        if os.path.exists(house_path):
+            try:
+                house_img = pygame.image.load(house_path).convert()
+                # Scale to fit screen while maintaining aspect ratio, then crop/fit
+                img_width, img_height = house_img.get_size()
+                screen_ratio = self.screen_width / self.screen_height
+                img_ratio = img_width / img_height
+
+                if img_ratio > screen_ratio:
+                    # Image is wider - scale by height and crop width
+                    new_height = self.screen_height
+                    new_width = int(img_width * (self.screen_height / img_height))
+                    scaled = pygame.transform.smoothscale(house_img, (new_width, new_height))
+                    x_offset = (new_width - self.screen_width) // 2
+                    surface.blit(scaled, (-x_offset, 0))
+                else:
+                    # Image is taller - scale by width and crop height
+                    new_width = self.screen_width
+                    new_height = int(img_height * (self.screen_width / img_width))
+                    scaled = pygame.transform.smoothscale(house_img, (new_width, new_height))
+                    y_offset = (new_height - self.screen_height) // 2
+                    surface.blit(scaled, (0, -y_offset))
+
+                print(f"Loaded house.jpg background: {img_width}x{img_height}")
+                return surface
+            except Exception as e:
+                print(f"Could not load house.jpg: {e}, generating park background")
+
+        # Fallback: generate park background procedurally
         ground_y = self.screen_height - 120  # Ground level
 
         # 1. Draw gradient sky
