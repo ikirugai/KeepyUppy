@@ -4,10 +4,14 @@ Detects players via webcam and tracks their body positions for game interaction.
 """
 
 import cv2
-import mediapipe as mp
 import numpy as np
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
+
+# Import MediaPipe tasks API (new API for mediapipe >= 0.10.0)
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 
 
 @dataclass
@@ -47,6 +51,43 @@ class PlayerLandmarks:
         return self.nose
 
 
+# Landmark indices for pose detection
+class PoseLandmarkIndex:
+    NOSE = 0
+    LEFT_EYE_INNER = 1
+    LEFT_EYE = 2
+    LEFT_EYE_OUTER = 3
+    RIGHT_EYE_INNER = 4
+    RIGHT_EYE = 5
+    RIGHT_EYE_OUTER = 6
+    LEFT_EAR = 7
+    RIGHT_EAR = 8
+    MOUTH_LEFT = 9
+    MOUTH_RIGHT = 10
+    LEFT_SHOULDER = 11
+    RIGHT_SHOULDER = 12
+    LEFT_ELBOW = 13
+    RIGHT_ELBOW = 14
+    LEFT_WRIST = 15
+    RIGHT_WRIST = 16
+    LEFT_PINKY = 17
+    RIGHT_PINKY = 18
+    LEFT_INDEX = 19
+    RIGHT_INDEX = 20
+    LEFT_THUMB = 21
+    RIGHT_THUMB = 22
+    LEFT_HIP = 23
+    RIGHT_HIP = 24
+    LEFT_KNEE = 25
+    RIGHT_KNEE = 26
+    LEFT_ANKLE = 27
+    RIGHT_ANKLE = 28
+    LEFT_HEEL = 29
+    RIGHT_HEEL = 30
+    LEFT_FOOT_INDEX = 31
+    RIGHT_FOOT_INDEX = 32
+
+
 class PlayerDetector:
     """Handles webcam capture and player pose detection using MediaPipe."""
 
@@ -64,22 +105,60 @@ class PlayerDetector:
         self.cap = None
         self.frame_width = 640
         self.frame_height = 480
+        self.detection_confidence = detection_confidence
+        self.tracking_confidence = tracking_confidence
 
-        # Initialize MediaPipe Pose
-        self.mp_pose = mp.solutions.pose
-        self.mp_drawing = mp.solutions.drawing_utils
-        self.pose = self.mp_pose.Pose(
-            static_image_mode=False,
-            model_complexity=1,  # 0=lite, 1=full, 2=heavy
-            smooth_landmarks=True,
-            enable_segmentation=False,
-            min_detection_confidence=detection_confidence,
-            min_tracking_confidence=tracking_confidence
-        )
+        # Pose landmarker will be initialized when we have model
+        self.pose_landmarker = None
+        self.latest_result = None
 
         # Store the last frame for display
         self.last_frame = None
         self.last_frame_rgb = None
+
+        # Initialize the pose landmarker
+        self._init_pose_landmarker()
+
+    def _init_pose_landmarker(self):
+        """Initialize MediaPipe Pose Landmarker."""
+        try:
+            # Create pose landmarker options
+            base_options = python.BaseOptions(
+                model_asset_path=self._get_model_path()
+            )
+            options = vision.PoseLandmarkerOptions(
+                base_options=base_options,
+                running_mode=vision.RunningMode.VIDEO,
+                num_poses=1,
+                min_pose_detection_confidence=self.detection_confidence,
+                min_pose_presence_confidence=self.detection_confidence,
+                min_tracking_confidence=self.tracking_confidence,
+            )
+            self.pose_landmarker = vision.PoseLandmarker.create_from_options(options)
+            print("MediaPipe Pose Landmarker initialized successfully")
+        except Exception as e:
+            print(f"Warning: Could not initialize pose landmarker: {e}")
+            self.pose_landmarker = None
+
+    def _get_model_path(self) -> str:
+        """Get or download the pose landmarker model."""
+        import os
+        import urllib.request
+
+        model_dir = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(model_dir, "pose_landmarker_lite.task")
+
+        if not os.path.exists(model_path):
+            print("Downloading pose detection model...")
+            url = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
+            try:
+                urllib.request.urlretrieve(url, model_path)
+                print("Model downloaded successfully!")
+            except Exception as e:
+                print(f"Could not download model: {e}")
+                raise
+
+        return model_path
 
     def start(self) -> bool:
         """Start the webcam capture. Returns True if successful."""
@@ -104,7 +183,8 @@ class PlayerDetector:
         if self.cap is not None:
             self.cap.release()
             self.cap = None
-        self.pose.close()
+        if self.pose_landmarker is not None:
+            self.pose_landmarker.close()
 
     def detect_players(self, game_width: int, game_height: int) -> List[PlayerLandmarks]:
         """
@@ -132,62 +212,60 @@ class PlayerDetector:
         self.last_frame = frame
         self.last_frame_rgb = frame_rgb
 
-        # Process with MediaPipe
-        results = self.pose.process(frame_rgb)
-
         players = []
 
-        if results.pose_landmarks:
-            landmarks = results.pose_landmarks.landmark
-            player = self._extract_landmarks(landmarks, game_width, game_height)
-            if player.is_visible:
-                players.append(player)
+        if self.pose_landmarker is not None:
+            try:
+                # Create MediaPipe Image
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
+
+                # Get timestamp in milliseconds
+                timestamp_ms = int(cv2.getTickCount() / cv2.getTickFrequency() * 1000)
+
+                # Detect pose
+                result = self.pose_landmarker.detect_for_video(mp_image, timestamp_ms)
+
+                if result.pose_landmarks and len(result.pose_landmarks) > 0:
+                    landmarks = result.pose_landmarks[0]
+                    player = self._extract_landmarks(landmarks, game_width, game_height)
+                    if player.is_visible:
+                        players.append(player)
+
+            except Exception as e:
+                print(f"Pose detection error: {e}")
 
         return players
 
     def _extract_landmarks(self, landmarks, game_width: int,
-                          game_height: int) -> PlayerLandmarks:
+                           game_height: int) -> PlayerLandmarks:
         """Extract and scale landmarks to game coordinates."""
         player = PlayerLandmarks()
 
-        # MediaPipe landmark indices
-        NOSE = self.mp_pose.PoseLandmark.NOSE
-        LEFT_SHOULDER = self.mp_pose.PoseLandmark.LEFT_SHOULDER
-        RIGHT_SHOULDER = self.mp_pose.PoseLandmark.RIGHT_SHOULDER
-        LEFT_ELBOW = self.mp_pose.PoseLandmark.LEFT_ELBOW
-        RIGHT_ELBOW = self.mp_pose.PoseLandmark.RIGHT_ELBOW
-        LEFT_WRIST = self.mp_pose.PoseLandmark.LEFT_WRIST
-        RIGHT_WRIST = self.mp_pose.PoseLandmark.RIGHT_WRIST
-        LEFT_HIP = self.mp_pose.PoseLandmark.LEFT_HIP
-        RIGHT_HIP = self.mp_pose.PoseLandmark.RIGHT_HIP
-        LEFT_KNEE = self.mp_pose.PoseLandmark.LEFT_KNEE
-        RIGHT_KNEE = self.mp_pose.PoseLandmark.RIGHT_KNEE
-        LEFT_ANKLE = self.mp_pose.PoseLandmark.LEFT_ANKLE
-        RIGHT_ANKLE = self.mp_pose.PoseLandmark.RIGHT_ANKLE
-
-        def scale_point(landmark) -> Optional[Tuple[float, float]]:
+        def scale_point(idx: int) -> Optional[Tuple[float, float]]:
             """Scale normalized coordinates to game coordinates."""
+            if idx >= len(landmarks):
+                return None
+            landmark = landmarks[idx]
             if landmark.visibility < 0.5:
                 return None
-            # Note: x is already mirrored from the flip
             x = landmark.x * game_width
             y = landmark.y * game_height
             return (x, y)
 
-        # Extract key landmarks
-        player.nose = scale_point(landmarks[NOSE])
-        player.left_shoulder = scale_point(landmarks[LEFT_SHOULDER])
-        player.right_shoulder = scale_point(landmarks[RIGHT_SHOULDER])
-        player.left_elbow = scale_point(landmarks[LEFT_ELBOW])
-        player.right_elbow = scale_point(landmarks[RIGHT_ELBOW])
-        player.left_hand = scale_point(landmarks[LEFT_WRIST])
-        player.right_hand = scale_point(landmarks[RIGHT_WRIST])
-        player.left_hip = scale_point(landmarks[LEFT_HIP])
-        player.right_hip = scale_point(landmarks[RIGHT_HIP])
-        player.left_knee = scale_point(landmarks[LEFT_KNEE])
-        player.right_knee = scale_point(landmarks[RIGHT_KNEE])
-        player.left_ankle = scale_point(landmarks[LEFT_ANKLE])
-        player.right_ankle = scale_point(landmarks[RIGHT_ANKLE])
+        # Extract key landmarks using indices
+        player.nose = scale_point(PoseLandmarkIndex.NOSE)
+        player.left_shoulder = scale_point(PoseLandmarkIndex.LEFT_SHOULDER)
+        player.right_shoulder = scale_point(PoseLandmarkIndex.RIGHT_SHOULDER)
+        player.left_elbow = scale_point(PoseLandmarkIndex.LEFT_ELBOW)
+        player.right_elbow = scale_point(PoseLandmarkIndex.RIGHT_ELBOW)
+        player.left_hand = scale_point(PoseLandmarkIndex.LEFT_WRIST)
+        player.right_hand = scale_point(PoseLandmarkIndex.RIGHT_WRIST)
+        player.left_hip = scale_point(PoseLandmarkIndex.LEFT_HIP)
+        player.right_hip = scale_point(PoseLandmarkIndex.RIGHT_HIP)
+        player.left_knee = scale_point(PoseLandmarkIndex.LEFT_KNEE)
+        player.right_knee = scale_point(PoseLandmarkIndex.RIGHT_KNEE)
+        player.left_ankle = scale_point(PoseLandmarkIndex.LEFT_ANKLE)
+        player.right_ankle = scale_point(PoseLandmarkIndex.RIGHT_ANKLE)
 
         # Calculate bounding box if enough landmarks visible
         visible_points = []
@@ -203,7 +281,6 @@ class PlayerDetector:
             ys = [p[1] for p in visible_points]
             min_x, max_x = min(xs), max(xs)
             min_y, max_y = min(ys), max(ys)
-            # Add some padding
             padding = 20
             player.bbox = (
                 int(min_x - padding),

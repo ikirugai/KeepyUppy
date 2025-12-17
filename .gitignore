@@ -42,5 +42,8 @@ env/
 # Game data
 highscore.json
 
+# MediaPipe model files
+*.task
+
 # Logs
 *.log
