@@ -129,7 +129,7 @@ class PlayerDetector:
             options = vision.PoseLandmarkerOptions(
                 base_options=base_options,
                 running_mode=vision.RunningMode.VIDEO,
-                num_poses=1,
+                num_poses=4,  # Support up to 4 players
                 min_pose_detection_confidence=self.detection_confidence,
                 min_pose_presence_confidence=self.detection_confidence,
                 min_tracking_confidence=self.tracking_confidence,
@@ -226,10 +226,11 @@ class PlayerDetector:
                 result = self.pose_landmarker.detect_for_video(mp_image, timestamp_ms)
 
                 if result.pose_landmarks and len(result.pose_landmarks) > 0:
-                    landmarks = result.pose_landmarks[0]
-                    player = self._extract_landmarks(landmarks, game_width, game_height)
-                    if player.is_visible:
-                        players.append(player)
+                    # Process all detected poses (up to 4 players)
+                    for landmarks in result.pose_landmarks:
+                        player = self._extract_landmarks(landmarks, game_width, game_height)
+                        if player.is_visible:
+                            players.append(player)
 
             except Exception as e:
                 print(f"Pose detection error: {e}")
