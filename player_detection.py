@@ -103,8 +103,8 @@ class PlayerDetector:
         """
         self.camera_index = camera_index
         self.cap = None
-        self.frame_width = 640
-        self.frame_height = 480
+        self.frame_width = 1280
+        self.frame_height = 720
         self.detection_confidence = detection_confidence
         self.tracking_confidence = tracking_confidence
 

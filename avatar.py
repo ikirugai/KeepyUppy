@@ -199,6 +199,9 @@ class AvatarRenderer:
             body_height = body_height + head_space
             body_center_y = body_center_y - head_space * 0.2
 
+        # Scale down to 50% size
+        body_height = body_height * 0.5
+
         # Calculate dimensions maintaining aspect ratio (roughly 0.67 width:height for these sprites)
         aspect_ratio = 0.67
         sprite_height = body_height
