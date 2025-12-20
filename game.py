@@ -31,7 +31,7 @@ class KeepyUppyGame:
     A motion-controlled balloon keeping game with Bluey-inspired graphics.
     """
 
-    def __init__(self, width: int = 1280, height: int = 720, fullscreen: bool = False):
+    def __init__(self, width: int = 1280, height: int = 720, fullscreen: bool = True):
         """
         Initialize the game.
 
@@ -598,18 +598,18 @@ def main():
 
     parser = argparse.ArgumentParser(description="KeepyUppy - Balloon Game")
     parser.add_argument('--width', type=int, default=1280,
-                       help='Screen width (default: 1280)')
+                       help='Screen width when windowed (default: 1280)')
     parser.add_argument('--height', type=int, default=720,
-                       help='Screen height (default: 720)')
-    parser.add_argument('--fullscreen', action='store_true',
-                       help='Run in fullscreen mode')
+                       help='Screen height when windowed (default: 720)')
+    parser.add_argument('--windowed', action='store_true',
+                       help='Run in windowed mode (default is fullscreen)')
 
     args = parser.parse_args()
 
     game = KeepyUppyGame(
         width=args.width,
         height=args.height,
-        fullscreen=args.fullscreen
+        fullscreen=not args.windowed
     )
     game.start()
 
