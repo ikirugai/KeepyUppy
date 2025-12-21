@@ -592,23 +592,83 @@ class KeepyUppyGame:
         self.screen.blit(resume_text, resume_rect)
 
     def _show_camera_preview(self):
-        """Show camera feed in a separate window."""
+        """Show camera feed in a separate window with detected skeleton."""
         if not self.show_camera or not self.camera_ready:
             return
 
         frame = self.player_detector.last_frame
         if frame is not None:
-            # Draw pose landmarks on the frame if available
             display_frame = frame.copy()
+            h, w = display_frame.shape[:2]
+
+            # Get detected players and draw skeleton
+            players = self.player_detector.detect_players(w, h)
+
+            # Colors for different players (BGR format)
+            player_colors = [
+                (255, 150, 0),    # Bluey - light blue
+                (0, 165, 255),    # Bingo - orange
+                (200, 100, 50),   # Bandit - blue-grey
+                (100, 130, 255),  # Chilli - salmon
+            ]
+
+            for i, player in enumerate(players):
+                color = player_colors[i % len(player_colors)]
+
+                # Draw skeleton connections
+                connections = [
+                    ('left_shoulder', 'right_shoulder'),
+                    ('left_shoulder', 'left_elbow'),
+                    ('left_elbow', 'left_hand'),
+                    ('right_shoulder', 'right_elbow'),
+                    ('right_elbow', 'right_hand'),
+                    ('left_shoulder', 'left_hip'),
+                    ('right_shoulder', 'right_hip'),
+                    ('left_hip', 'right_hip'),
+                    ('left_hip', 'left_knee'),
+                    ('left_knee', 'left_ankle'),
+                    ('right_hip', 'right_knee'),
+                    ('right_knee', 'right_ankle'),
+                ]
+
+                for start_name, end_name in connections:
+                    start_pt = getattr(player, start_name, None)
+                    end_pt = getattr(player, end_name, None)
+                    if start_pt and end_pt:
+                        cv2.line(display_frame,
+                                (int(start_pt[0]), int(start_pt[1])),
+                                (int(end_pt[0]), int(end_pt[1])),
+                                color, 3)
+
+                # Draw joint points
+                joints = ['nose', 'left_shoulder', 'right_shoulder', 'left_elbow',
+                         'right_elbow', 'left_hand', 'right_hand', 'left_hip',
+                         'right_hip', 'left_knee', 'right_knee', 'left_ankle', 'right_ankle']
+
+                for joint_name in joints:
+                    pt = getattr(player, joint_name, None)
+                    if pt:
+                        # Larger circles for hands (collision points)
+                        radius = 12 if 'hand' in joint_name else 6
+                        cv2.circle(display_frame, (int(pt[0]), int(pt[1])), radius, color, -1)
+                        cv2.circle(display_frame, (int(pt[0]), int(pt[1])), radius, (255, 255, 255), 2)
+
+                # Label the player
+                if player.nose:
+                    label = ['Bluey', 'Bingo', 'Bandit', 'Chilli'][i % 4]
+                    cv2.putText(display_frame, label,
+                               (int(player.nose[0]) - 30, int(player.nose[1]) - 30),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
             # Add text overlay
-            cv2.putText(display_frame, "Camera Preview - Position yourself in frame",
+            num_players = len(players)
+            status = f"Detected: {num_players} player{'s' if num_players != 1 else ''}"
+            cv2.putText(display_frame, status,
                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            cv2.putText(display_frame, "Press 'Q' in this window to hide",
+            cv2.putText(display_frame, "Press 'Q' to hide | Hands = collision points",
                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
             # Draw frame boundaries guide
-            h, w = display_frame.shape[:2]
             margin = 50
             cv2.rectangle(display_frame, (margin, margin), (w - margin, h - margin), (0, 255, 0), 2)
 
