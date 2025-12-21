@@ -148,18 +148,7 @@ class AvatarRenderer:
         )
 
         # Draw limbs BEHIND the sprite
-        # Draw legs first (furthest back)
-        if positions.get('left_ankle') or positions.get('left_knee'):
-            foot_pos = positions.get('left_ankle') or positions.get('left_knee')
-            self._draw_limb(surface, left_hip_pos, foot_pos, limb_thickness, config, is_leg=True)
-            self._draw_paw(surface, foot_pos, paw_size, config, is_foot=True)
-
-        if positions.get('right_ankle') or positions.get('right_knee'):
-            foot_pos = positions.get('right_ankle') or positions.get('right_knee')
-            self._draw_limb(surface, right_hip_pos, foot_pos, limb_thickness, config, is_leg=True)
-            self._draw_paw(surface, foot_pos, paw_size, config, is_foot=True)
-
-        # Draw arms
+        # Draw arms only (no legs)
         if positions.get('left_hand'):
             self._draw_limb(surface, left_shoulder_pos, positions['left_hand'], limb_thickness, config)
             self._draw_paw(surface, positions['left_hand'], paw_size, config)
@@ -339,10 +328,6 @@ class AvatarRenderer:
             'right_hand': smooth(player.right_hand, 'r_hand'),
             'left_hip': smooth(player.left_hip, 'l_hip'),
             'right_hip': smooth(player.right_hip, 'r_hip'),
-            'left_knee': smooth(player.left_knee, 'l_knee'),
-            'right_knee': smooth(player.right_knee, 'r_knee'),
-            'left_ankle': smooth(player.left_ankle, 'l_ankle'),
-            'right_ankle': smooth(player.right_ankle, 'r_ankle'),
         }
 
         if not positions['left_shoulder'] or not positions['right_shoulder']:

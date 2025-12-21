@@ -25,17 +25,15 @@ class PlayerLandmarks:
     left_shoulder: Optional[Tuple[float, float]] = None
     right_shoulder: Optional[Tuple[float, float]] = None
     nose: Optional[Tuple[float, float]] = None
-    # For avatar rendering
+    # For avatar rendering (hips only, no legs)
     left_hip: Optional[Tuple[float, float]] = None
     right_hip: Optional[Tuple[float, float]] = None
-    left_knee: Optional[Tuple[float, float]] = None
-    right_knee: Optional[Tuple[float, float]] = None
-    left_ankle: Optional[Tuple[float, float]] = None
-    right_ankle: Optional[Tuple[float, float]] = None
     # Visibility flag
     is_visible: bool = False
     # Bounding box for player (x, y, width, height)
     bbox: Optional[Tuple[int, int, int, int]] = None
+    # Tracking ID for stability
+    track_id: int = 0
 
     def get_collision_points(self) -> List[Tuple[float, float]]:
         """Returns all points that can collide with the balloon."""
@@ -115,6 +113,12 @@ class PlayerDetector:
         # Store the last frame for display
         self.last_frame = None
         self.last_frame_rgb = None
+
+        # Smoothing and stability
+        self.smooth_factor = 0.3  # Lower = more smoothing
+        self.previous_landmarks = {}  # Store previous positions for smoothing
+        self.player_positions = []  # Track player positions for stable assignment
+        self.frames_since_detection = {}  # Track how long since each player was seen
 
         # Initialize the pose landmarker
         self._init_pose_landmarker()
@@ -227,8 +231,18 @@ class PlayerDetector:
 
                 if result.pose_landmarks and len(result.pose_landmarks) > 0:
                     # Process all detected poses (up to 4 players)
+                    # Sort by x-position for consistent player ordering (left to right)
+                    pose_data = []
                     for landmarks in result.pose_landmarks:
-                        player = self._extract_landmarks(landmarks, game_width, game_height)
+                        # Get center x position for sorting
+                        if len(landmarks) > PoseLandmarkIndex.LEFT_SHOULDER:
+                            center_x = landmarks[PoseLandmarkIndex.LEFT_SHOULDER].x
+                            pose_data.append((center_x, landmarks))
+
+                    pose_data.sort(key=lambda x: x[0])
+
+                    for idx, (_, landmarks) in enumerate(pose_data):
+                        player = self._extract_landmarks(landmarks, game_width, game_height, idx)
                         if player.is_visible:
                             players.append(player)
 
@@ -238,35 +252,41 @@ class PlayerDetector:
         return players
 
     def _extract_landmarks(self, landmarks, game_width: int,
-                           game_height: int) -> PlayerLandmarks:
-        """Extract and scale landmarks to game coordinates."""
+                           game_height: int, player_idx: int) -> PlayerLandmarks:
+        """Extract and scale landmarks to game coordinates with smoothing."""
         player = PlayerLandmarks()
+        player.track_id = player_idx
 
-        def scale_point(idx: int) -> Optional[Tuple[float, float]]:
-            """Scale normalized coordinates to game coordinates."""
+        def scale_point(idx: int, point_name: str) -> Optional[Tuple[float, float]]:
+            """Scale normalized coordinates to game coordinates with smoothing."""
             if idx >= len(landmarks):
                 return None
             landmark = landmarks[idx]
-            if landmark.visibility < 0.5:
+            if landmark.visibility < 0.6:  # Higher threshold for stability
                 return None
             x = landmark.x * game_width
             y = landmark.y * game_height
+
+            # Apply smoothing using previous position
+            key = f"p{player_idx}_{point_name}"
+            if key in self.previous_landmarks:
+                prev_x, prev_y = self.previous_landmarks[key]
+                x = prev_x + (x - prev_x) * self.smooth_factor
+                y = prev_y + (y - prev_y) * self.smooth_factor
+
+            self.previous_landmarks[key] = (x, y)
             return (x, y)
 
-        # Extract key landmarks using indices
-        player.nose = scale_point(PoseLandmarkIndex.NOSE)
-        player.left_shoulder = scale_point(PoseLandmarkIndex.LEFT_SHOULDER)
-        player.right_shoulder = scale_point(PoseLandmarkIndex.RIGHT_SHOULDER)
-        player.left_elbow = scale_point(PoseLandmarkIndex.LEFT_ELBOW)
-        player.right_elbow = scale_point(PoseLandmarkIndex.RIGHT_ELBOW)
-        player.left_hand = scale_point(PoseLandmarkIndex.LEFT_WRIST)
-        player.right_hand = scale_point(PoseLandmarkIndex.RIGHT_WRIST)
-        player.left_hip = scale_point(PoseLandmarkIndex.LEFT_HIP)
-        player.right_hip = scale_point(PoseLandmarkIndex.RIGHT_HIP)
-        player.left_knee = scale_point(PoseLandmarkIndex.LEFT_KNEE)
-        player.right_knee = scale_point(PoseLandmarkIndex.RIGHT_KNEE)
-        player.left_ankle = scale_point(PoseLandmarkIndex.LEFT_ANKLE)
-        player.right_ankle = scale_point(PoseLandmarkIndex.RIGHT_ANKLE)
+        # Extract key landmarks using indices (no legs)
+        player.nose = scale_point(PoseLandmarkIndex.NOSE, 'nose')
+        player.left_shoulder = scale_point(PoseLandmarkIndex.LEFT_SHOULDER, 'l_shoulder')
+        player.right_shoulder = scale_point(PoseLandmarkIndex.RIGHT_SHOULDER, 'r_shoulder')
+        player.left_elbow = scale_point(PoseLandmarkIndex.LEFT_ELBOW, 'l_elbow')
+        player.right_elbow = scale_point(PoseLandmarkIndex.RIGHT_ELBOW, 'r_elbow')
+        player.left_hand = scale_point(PoseLandmarkIndex.LEFT_WRIST, 'l_hand')
+        player.right_hand = scale_point(PoseLandmarkIndex.RIGHT_WRIST, 'r_hand')
+        player.left_hip = scale_point(PoseLandmarkIndex.LEFT_HIP, 'l_hip')
+        player.right_hip = scale_point(PoseLandmarkIndex.RIGHT_HIP, 'r_hip')
 
         # Calculate bounding box if enough landmarks visible
         visible_points = []

@@ -615,7 +615,7 @@ class KeepyUppyGame:
             for i, player in enumerate(players):
                 color = player_colors[i % len(player_colors)]
 
-                # Draw skeleton connections
+                # Draw skeleton connections (upper body only)
                 connections = [
                     ('left_shoulder', 'right_shoulder'),
                     ('left_shoulder', 'left_elbow'),
@@ -625,10 +625,6 @@ class KeepyUppyGame:
                     ('left_shoulder', 'left_hip'),
                     ('right_shoulder', 'right_hip'),
                     ('left_hip', 'right_hip'),
-                    ('left_hip', 'left_knee'),
-                    ('left_knee', 'left_ankle'),
-                    ('right_hip', 'right_knee'),
-                    ('right_knee', 'right_ankle'),
                 ]
 
                 for start_name, end_name in connections:
@@ -640,10 +636,9 @@ class KeepyUppyGame:
                                 (int(end_pt[0]), int(end_pt[1])),
                                 color, 3)
 
-                # Draw joint points
+                # Draw joint points (upper body only)
                 joints = ['nose', 'left_shoulder', 'right_shoulder', 'left_elbow',
-                         'right_elbow', 'left_hand', 'right_hand', 'left_hip',
-                         'right_hip', 'left_knee', 'right_knee', 'left_ankle', 'right_ankle']
+                         'right_elbow', 'left_hand', 'right_hand', 'left_hip', 'right_hip']
 
                 for joint_name in joints:
                     pt = getattr(player, joint_name, None)
