@@ -120,6 +120,10 @@ class PlayerDetector:
         self.player_positions = []  # Track player positions for stable assignment
         self.frames_since_detection = {}  # Track how long since each player was seen
 
+        # Detection region (percentage from edge to ignore)
+        # e.g., 0.1 means ignore outer 10% on each side
+        self.detection_margin = 0.1
+
         # Initialize the pose landmarker
         self._init_pose_landmarker()
 
@@ -243,13 +247,40 @@ class PlayerDetector:
 
                     for idx, (_, landmarks) in enumerate(pose_data):
                         player = self._extract_landmarks(landmarks, game_width, game_height, idx)
-                        if player.is_visible:
+                        if player.is_visible and self._is_in_detection_region(player, game_width, game_height):
                             players.append(player)
 
             except Exception as e:
                 print(f"Pose detection error: {e}")
 
         return players
+
+    def _is_in_detection_region(self, player: PlayerLandmarks, game_width: int, game_height: int) -> bool:
+        """Check if player's center is within the detection region."""
+        # Get player center from shoulders
+        if not player.left_shoulder or not player.right_shoulder:
+            return False
+
+        center_x = (player.left_shoulder[0] + player.right_shoulder[0]) / 2
+        center_y = (player.left_shoulder[1] + player.right_shoulder[1]) / 2
+
+        # Calculate bounds
+        min_x = game_width * self.detection_margin
+        max_x = game_width * (1 - self.detection_margin)
+        min_y = game_height * self.detection_margin
+        max_y = game_height * (1 - self.detection_margin)
+
+        return min_x <= center_x <= max_x and min_y <= center_y <= max_y
+
+    def set_detection_margin(self, margin: float):
+        """Set the detection margin (0.0 to 0.4). Higher = smaller detection area."""
+        self.detection_margin = max(0.0, min(0.4, margin))
+
+    def get_detection_bounds(self, width: int, height: int) -> Tuple[int, int, int, int]:
+        """Get the detection region bounds as (x, y, w, h)."""
+        margin_x = int(width * self.detection_margin)
+        margin_y = int(height * self.detection_margin)
+        return (margin_x, margin_y, width - 2 * margin_x, height - 2 * margin_y)
 
     def _extract_landmarks(self, landmarks, game_width: int,
                            game_height: int, player_idx: int) -> PlayerLandmarks:

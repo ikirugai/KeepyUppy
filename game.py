@@ -99,6 +99,7 @@ class KeepyUppyGame:
         # Camera status
         self.camera_ready = False
         self.show_camera = show_camera
+        self.cached_players = []  # Cache detected players to avoid double detection
 
         # Sound effects (simple beeps using pygame)
         self._init_sounds()
@@ -237,6 +238,10 @@ class KeepyUppyGame:
 
     def _update(self, dt: float):
         """Update game logic."""
+        # Always detect players for camera preview (do this once per frame)
+        if self.camera_ready:
+            self.cached_players = self.player_detector.detect_players(self.width, self.height)
+
         # Update clouds (always moving for ambiance)
         for cloud in self.clouds:
             cloud['x'] += cloud['speed'] * dt
@@ -273,10 +278,9 @@ class KeepyUppyGame:
         # Update score
         self.scoring.update(dt)
 
-        # Detect players
-        if self.camera_ready:
-            players = self.player_detector.detect_players(self.width, self.height)
-            self._handle_player_collisions(players, dt)
+        # Handle player collisions (players already detected in _update)
+        if self.camera_ready and self.cached_players:
+            self._handle_player_collisions(self.cached_players, dt)
 
         # Check for game over
         if self.balloon.is_popped:
@@ -601,8 +605,10 @@ class KeepyUppyGame:
             display_frame = frame.copy()
             h, w = display_frame.shape[:2]
 
-            # Get detected players and draw skeleton
-            players = self.player_detector.detect_players(w, h)
+            # Use cached players - scale from game coords to camera coords
+            players = self.cached_players
+            scale_x = w / self.width
+            scale_y = h / self.height
 
             # Colors for different players (BGR format)
             player_colors = [
@@ -611,6 +617,12 @@ class KeepyUppyGame:
                 (200, 100, 50),   # Bandit - blue-grey
                 (100, 130, 255),  # Chilli - salmon
             ]
+
+            def scale_pt(pt):
+                """Scale game coordinates to camera coordinates."""
+                if pt is None:
+                    return None
+                return (int(pt[0] * scale_x), int(pt[1] * scale_y))
 
             for i, player in enumerate(players):
                 color = player_colors[i % len(player_colors)]
@@ -628,31 +640,29 @@ class KeepyUppyGame:
                 ]
 
                 for start_name, end_name in connections:
-                    start_pt = getattr(player, start_name, None)
-                    end_pt = getattr(player, end_name, None)
+                    start_pt = scale_pt(getattr(player, start_name, None))
+                    end_pt = scale_pt(getattr(player, end_name, None))
                     if start_pt and end_pt:
-                        cv2.line(display_frame,
-                                (int(start_pt[0]), int(start_pt[1])),
-                                (int(end_pt[0]), int(end_pt[1])),
-                                color, 3)
+                        cv2.line(display_frame, start_pt, end_pt, color, 3)
 
                 # Draw joint points (upper body only)
                 joints = ['nose', 'left_shoulder', 'right_shoulder', 'left_elbow',
                          'right_elbow', 'left_hand', 'right_hand', 'left_hip', 'right_hip']
 
                 for joint_name in joints:
-                    pt = getattr(player, joint_name, None)
+                    pt = scale_pt(getattr(player, joint_name, None))
                     if pt:
                         # Larger circles for hands (collision points)
                         radius = 12 if 'hand' in joint_name else 6
-                        cv2.circle(display_frame, (int(pt[0]), int(pt[1])), radius, color, -1)
-                        cv2.circle(display_frame, (int(pt[0]), int(pt[1])), radius, (255, 255, 255), 2)
+                        cv2.circle(display_frame, pt, radius, color, -1)
+                        cv2.circle(display_frame, pt, radius, (255, 255, 255), 2)
 
                 # Label the player
-                if player.nose:
+                nose_pt = scale_pt(player.nose)
+                if nose_pt:
                     label = ['Bluey', 'Bingo', 'Bandit', 'Chilli'][i % 4]
                     cv2.putText(display_frame, label,
-                               (int(player.nose[0]) - 30, int(player.nose[1]) - 30),
+                               (nose_pt[0] - 30, nose_pt[1] - 30),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
             # Add text overlay
@@ -660,20 +670,36 @@ class KeepyUppyGame:
             status = f"Detected: {num_players} player{'s' if num_players != 1 else ''}"
             cv2.putText(display_frame, status,
                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            cv2.putText(display_frame, "Press 'Q' to hide | Hands = collision points",
+            cv2.putText(display_frame, "Press 'Q' to hide | +/- to adjust detection area",
                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
-            # Draw frame boundaries guide
-            margin = 50
-            cv2.rectangle(display_frame, (margin, margin), (w - margin, h - margin), (0, 255, 0), 2)
+            # Draw detection region boundary
+            bounds = self.player_detector.get_detection_bounds(w, h)
+            cv2.rectangle(display_frame,
+                         (bounds[0], bounds[1]),
+                         (bounds[0] + bounds[2], bounds[1] + bounds[3]),
+                         (0, 255, 0), 2)
+            cv2.putText(display_frame, "Detection Zone",
+                       (bounds[0] + 5, bounds[1] + 20),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
             cv2.imshow("KeepyUppy - Camera", display_frame)
 
-            # Check if user wants to close camera window
+            # Check for camera window key presses
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
                 self.show_camera = False
                 cv2.destroyWindow("KeepyUppy - Camera")
+            elif key == ord('+') or key == ord('='):
+                # Increase margin (smaller detection area)
+                new_margin = self.player_detector.detection_margin + 0.05
+                self.player_detector.set_detection_margin(new_margin)
+                print(f"Detection margin: {self.player_detector.detection_margin:.0%}")
+            elif key == ord('-') or key == ord('_'):
+                # Decrease margin (larger detection area)
+                new_margin = self.player_detector.detection_margin - 0.05
+                self.player_detector.set_detection_margin(new_margin)
+                print(f"Detection margin: {self.player_detector.detection_margin:.0%}")
 
     def _cleanup(self):
         """Clean up resources."""
