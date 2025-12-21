@@ -4,6 +4,7 @@ The core game logic that ties together all components.
 """
 
 import pygame
+import cv2
 import math
 import sys
 from typing import List, Optional, Tuple
@@ -31,7 +32,7 @@ class KeepyUppyGame:
     A motion-controlled balloon keeping game with Bluey-inspired graphics.
     """
 
-    def __init__(self, width: int = 1280, height: int = 720, fullscreen: bool = True):
+    def __init__(self, width: int = 1280, height: int = 720, fullscreen: bool = False, show_camera: bool = True):
         """
         Initialize the game.
 
@@ -39,6 +40,7 @@ class KeepyUppyGame:
             width: Screen width
             height: Screen height
             fullscreen: Whether to run in fullscreen mode
+            show_camera: Whether to show camera preview window
         """
         # Initialize pygame
         pygame.init()
@@ -96,6 +98,7 @@ class KeepyUppyGame:
 
         # Camera status
         self.camera_ready = False
+        self.show_camera = show_camera
 
         # Sound effects (simple beeps using pygame)
         self._init_sounds()
@@ -186,6 +189,9 @@ class KeepyUppyGame:
 
             # Render
             self._render()
+
+            # Show camera preview window
+            self._show_camera_preview()
 
             # Update display
             pygame.display.flip()
@@ -585,10 +591,40 @@ class KeepyUppyGame:
                                                    self.height // 2 + 60))
         self.screen.blit(resume_text, resume_rect)
 
+    def _show_camera_preview(self):
+        """Show camera feed in a separate window."""
+        if not self.show_camera or not self.camera_ready:
+            return
+
+        frame = self.player_detector.last_frame
+        if frame is not None:
+            # Draw pose landmarks on the frame if available
+            display_frame = frame.copy()
+
+            # Add text overlay
+            cv2.putText(display_frame, "Camera Preview - Position yourself in frame",
+                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(display_frame, "Press 'Q' in this window to hide",
+                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
+            # Draw frame boundaries guide
+            h, w = display_frame.shape[:2]
+            margin = 50
+            cv2.rectangle(display_frame, (margin, margin), (w - margin, h - margin), (0, 255, 0), 2)
+
+            cv2.imshow("KeepyUppy - Camera", display_frame)
+
+            # Check if user wants to close camera window
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):
+                self.show_camera = False
+                cv2.destroyWindow("KeepyUppy - Camera")
+
     def _cleanup(self):
         """Clean up resources."""
         print("Shutting down...")
         self.player_detector.stop()
+        cv2.destroyAllWindows()
         pygame.quit()
 
 
@@ -598,18 +634,21 @@ def main():
 
     parser = argparse.ArgumentParser(description="KeepyUppy - Balloon Game")
     parser.add_argument('--width', type=int, default=1280,
-                       help='Screen width when windowed (default: 1280)')
+                       help='Screen width (default: 1280)')
     parser.add_argument('--height', type=int, default=720,
-                       help='Screen height when windowed (default: 720)')
-    parser.add_argument('--windowed', action='store_true',
-                       help='Run in windowed mode (default is fullscreen)')
+                       help='Screen height (default: 720)')
+    parser.add_argument('--fullscreen', action='store_true',
+                       help='Run in fullscreen mode')
+    parser.add_argument('--no-camera-preview', action='store_true',
+                       help='Hide the camera preview window')
 
     args = parser.parse_args()
 
     game = KeepyUppyGame(
         width=args.width,
         height=args.height,
-        fullscreen=not args.windowed
+        fullscreen=args.fullscreen,
+        show_camera=not args.no_camera_preview
     )
     game.start()
 
