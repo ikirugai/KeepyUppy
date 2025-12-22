@@ -173,19 +173,41 @@ class KeepyUppyGame:
     def run(self):
         """Main game loop."""
         running = True
+        frame_count = 0
+        detection_interval = 2  # Only detect every N frames to reduce lag
+
+        def process_events():
+            """Process pygame events - returns False if should quit."""
+            nonlocal running
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return False
+                elif event.type == pygame.KEYDOWN:
+                    if not self._handle_keydown(event.key):
+                        return False
+            return True
 
         while running:
             # Calculate delta time
             dt = self.clock.tick(self.target_fps) / 1000.0
+            frame_count += 1
 
-            # Handle events
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                elif event.type == pygame.KEYDOWN:
-                    running = self._handle_keydown(event.key)
+            # Process events FIRST (responsive keyboard)
+            if not process_events():
+                running = False
+                continue
 
-            # Update game state
+            # Detect players (skip some frames to reduce lag)
+            if self.camera_ready and frame_count % detection_interval == 0:
+                self.cached_players = self.player_detector.detect_players(
+                    self.width, self.height)
+
+            # Process events AGAIN after detection (catch any missed during slow detection)
+            if not process_events():
+                running = False
+                continue
+
+            # Update game state (uses cached players)
             self._update(dt)
 
             # Render
@@ -238,9 +260,7 @@ class KeepyUppyGame:
 
     def _update(self, dt: float):
         """Update game logic."""
-        # Always detect players for camera preview (do this once per frame)
-        if self.camera_ready:
-            self.cached_players = self.player_detector.detect_players(self.width, self.height)
+        # Player detection now happens in run() with frame skipping for performance
 
         # Update clouds (always moving for ambiance)
         for cloud in self.clouds:
